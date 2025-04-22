@@ -13,13 +13,26 @@ dotenv.config();
 // Initialize Stripe (needed here if used globally or by multiple routes directly)
 // const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurantDB', {
-  // useNewUrlParser: true, // Deprecated options
-  // useUnifiedTopology: true,
-})
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.error('MongoDB connection error:', err));
+// Connect to MongoDB with serverless-friendly approach
+let cachedDb = null;
+const connectToDatabase = async () => {
+  if (cachedDb) {
+    return cachedDb;
+  }
+
+  try {
+    const connection = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurantDB');
+    console.log('Connected to MongoDB');
+    cachedDb = connection;
+    return connection;
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    throw err;
+  }
+};
+
+// Connect immediately for serverless
+connectToDatabase();
 
 // Import models (potentially needed by middleware or configuration)
 const User = require('./models/User');
@@ -31,14 +44,14 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:8080';
 const ADMIN_URL = process.env.ADMIN_URL || 'http://localhost:4001';
-const ADMIN_URL_DEV = 'http://localhost:4000'; // Admin panel development port
+const ADMIN_URL_DEV = process.env.NODE_ENV === 'production' ? null : 'http://localhost:4000';
 
-// Create HTTP server using Express app - keep this for future use
+// Create HTTP server - only used in dev environment
 const server = http.createServer(app);
 
 // --- Middleware ---
 app.use(cors({
-  origin: [CLIENT_URL, ADMIN_URL, ADMIN_URL_DEV], // Allow both client and admin panel
+  origin: [CLIENT_URL, ADMIN_URL, ADMIN_URL_DEV].filter(Boolean),
   credentials: true
 }));
 // Special middleware for Stripe webhook BEFORE express.json()
@@ -100,53 +113,58 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/contact', contactRoutes);
 
-// Root route - Detailed API documentation
+// Root route - API documentation
 app.get('/', (req, res) => {
-  res.json({ 
+  // Get base URL for documentation
+  const baseUrl = process.env.NODE_ENV === 'production'
+    ? 'https://chatpati-backend.vercel.app'
+    : `http://localhost:${PORT}`;
+
+  res.json({
     name: 'Plate to Pixel Eatery API',
     version: '1.0.0',
     description: 'Backend API for the Plate to Pixel Eatery restaurant application',
-    
+
     endpoints: {
       auth: [
-        { method: 'GET', url: 'http://localhost:3001/api/auth/google', description: 'Initiate Google OAuth authentication', authRequired: false },
-        { method: 'GET', url: 'http://localhost:3001/api/auth/google/callback', description: 'Google OAuth callback', authRequired: false },
-        { method: 'GET', url: 'http://localhost:3001/api/auth/me', description: 'Get current authenticated user', authRequired: true },
-        { method: 'POST', url: 'http://localhost:3001/api/auth/logout', description: 'Log out user (clears token)', authRequired: false }
+        { method: 'GET', url: `${baseUrl}/api/auth/google`, description: 'Initiate Google OAuth authentication', authRequired: false },
+        { method: 'GET', url: `${baseUrl}/api/auth/google/callback`, description: 'Google OAuth callback', authRequired: false },
+        { method: 'GET', url: `${baseUrl}/api/auth/me`, description: 'Get current authenticated user', authRequired: true },
+        { method: 'POST', url: `${baseUrl}/api/auth/logout`, description: 'Log out user (clears token)', authRequired: false }
       ],
 
       menuItems: [
-        { method: 'GET', url: 'http://localhost:3001/api/menu-items', description: 'Get all available menu items', authRequired: false },
-        { method: 'GET', url: 'http://localhost:3001/api/menu-items/:id', description: 'Get a specific menu item (replace :id)', authRequired: false },
-        { method: 'POST', url: 'http://localhost:3001/api/menu-items', description: 'Create a new menu item', authRequired: 'admin' },
-        { method: 'PUT', url: 'http://localhost:3001/api/menu-items/:id', description: 'Update a menu item (replace :id)', authRequired: 'admin' },
-        { method: 'DELETE', url: 'http://localhost:3001/api/menu-items/:id', description: 'Delete a menu item (replace :id)', authRequired: 'admin' }
+        { method: 'GET', url: `${baseUrl}/api/menu-items`, description: 'Get all available menu items', authRequired: false },
+        { method: 'GET', url: `${baseUrl}/api/menu-items/:id`, description: 'Get a specific menu item (replace :id)', authRequired: false },
+        { method: 'POST', url: `${baseUrl}/api/menu-items`, description: 'Create a new menu item', authRequired: 'admin' },
+        { method: 'PUT', url: `${baseUrl}/api/menu-items/:id`, description: 'Update a menu item (replace :id)', authRequired: 'admin' },
+        { method: 'DELETE', url: `${baseUrl}/api/menu-items/:id`, description: 'Delete a menu item (replace :id)', authRequired: 'admin' }
       ],
 
       orders: [
-        { method: 'GET', url: 'http://localhost:3001/api/orders', description: 'Get orders (admin: all, user: own)', authRequired: true },
-        { method: 'GET', url: 'http://localhost:3001/api/orders/:id', description: 'Get a specific order (replace :id)', authRequired: 'owner/admin' },
-        { method: 'POST', url: 'http://localhost:3001/api/orders', description: 'Create a new order', authRequired: true },
-        { method: 'PUT', url: 'http://localhost:3001/api/orders/:id/status', description: 'Update order status (replace :id)', authRequired: 'admin' },
-        { method: 'POST', url: 'http://localhost:3001/api/orders/:id/cancel', description: 'Cancel an order (replace :id)', authRequired: 'owner/admin' }
+        { method: 'GET', url: `${baseUrl}/api/orders`, description: 'Get orders (admin: all, user: own)', authRequired: true },
+        { method: 'GET', url: `${baseUrl}/api/orders/:id`, description: 'Get a specific order (replace :id)', authRequired: 'owner/admin' },
+        { method: 'POST', url: `${baseUrl}/api/orders`, description: 'Create a new order', authRequired: true },
+        { method: 'PUT', url: `${baseUrl}/api/orders/:id/status`, description: 'Update order status (replace :id)', authRequired: 'admin' },
+        { method: 'POST', url: `${baseUrl}/api/orders/:id/cancel`, description: 'Cancel an order (replace :id)', authRequired: 'owner/admin' }
       ],
 
       users: [
-        { method: 'PUT', url: 'http://localhost:3001/api/users/profile', description: 'Update user profile', authRequired: true }
+        { method: 'PUT', url: `${baseUrl}/api/users/profile`, description: 'Update user profile', authRequired: true }
       ],
 
       payments: [
-        { method: 'POST', url: 'http://localhost:3001/api/payments/create-checkout-session', description: 'Create Stripe checkout session', authRequired: true },
-        { method: 'POST', url: 'http://localhost:3001/api/payments/create-payment-intent', description: 'Create Stripe payment intent', authRequired: true },
-        { method: 'POST', url: 'http://localhost:3001/api/payments/webhook', description: 'Stripe webhook endpoint', authRequired: 'stripe-signature' }
+        { method: 'POST', url: `${baseUrl}/api/payments/create-checkout-session`, description: 'Create Stripe checkout session', authRequired: true },
+        { method: 'POST', url: `${baseUrl}/api/payments/create-payment-intent`, description: 'Create Stripe payment intent', authRequired: true },
+        { method: 'POST', url: `${baseUrl}/api/payments/webhook`, description: 'Stripe webhook endpoint', authRequired: 'stripe-signature' }
       ],
 
       contact: [
-        { method: 'POST', url: 'http://localhost:3001/api/contact', description: 'Submit a contact form', authRequired: false },
-        { method: 'GET', url: 'http://localhost:3001/api/contact', description: 'Get all contact messages', authRequired: 'admin' },
-        { method: 'GET', url: 'http://localhost:3001/api/contact/:id', description: 'Get a specific contact message', authRequired: 'admin' },
-        { method: 'PUT', url: 'http://localhost:3001/api/contact/:id/status', description: 'Update message status', authRequired: 'admin' },
-        { method: 'DELETE', url: 'http://localhost:3001/api/contact/:id', description: 'Delete a contact message', authRequired: 'admin' }
+        { method: 'POST', url: `${baseUrl}/api/contact`, description: 'Submit a contact form', authRequired: false },
+        { method: 'GET', url: `${baseUrl}/api/contact`, description: 'Get all contact messages', authRequired: 'admin' },
+        { method: 'GET', url: `${baseUrl}/api/contact/:id`, description: 'Get a specific contact message', authRequired: 'admin' },
+        { method: 'PUT', url: `${baseUrl}/api/contact/:id/status`, description: 'Update message status', authRequired: 'admin' },
+        { method: 'DELETE', url: `${baseUrl}/api/contact/:id`, description: 'Delete a contact message', authRequired: 'admin' }
       ]
     },
 
@@ -154,15 +172,22 @@ app.get('/', (req, res) => {
   });
 });
 
-// Basic Error Handling Middleware (example)
+// Enhanced error handling middleware for better debugging
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Something broke!');
+  console.error('Server error:', err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'production' ? null : err.message
+  });
 });
 
-// Start the server using the HTTP server
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Start server in development only - Vercel handles this in production
+if (process.env.NODE_ENV !== 'production') {
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
-module.exports = app; // Export for potential testing
+// Export for Vercel serverless functions
+module.exports = app;
