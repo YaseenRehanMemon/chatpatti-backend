@@ -45,13 +45,14 @@ const PORT = process.env.PORT || 3001;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:8080';
 const ADMIN_URL = process.env.ADMIN_URL || 'http://localhost:4001';
 const ADMIN_URL_DEV = process.env.NODE_ENV === 'production' ? null : 'http://localhost:4000';
+const VERCEL_FRONTEND_URL = 'https://chatpatti-frontend.vercel.app';
 
 // Create HTTP server - only used in dev environment
 const server = http.createServer(app);
 
 // --- Middleware ---
 app.use(cors({
-  origin: [CLIENT_URL, ADMIN_URL, ADMIN_URL_DEV].filter(Boolean),
+  origin: [CLIENT_URL, ADMIN_URL, ADMIN_URL_DEV,VERCEL_FRONTEND_URL].filter(Boolean),
   credentials: true
 }));
 // Special middleware for Stripe webhook BEFORE express.json()
