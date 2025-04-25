@@ -72,7 +72,7 @@ passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   // Ensure callback URL matches the one registered in Google Cloud Console
-  callbackURL: `/api/auth/google/callback` // Relative path is usually fine if proxying
+  callbackURL: 'https://chatpatti-backend.vercel.app/api/auth/google/callback' // Relative path is usually fine if proxying
 }, async (accessToken, refreshToken, profile, done) => {
   try {
     let user = await User.findOne({ email: profile.emails[0].value });
