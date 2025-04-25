@@ -45,7 +45,7 @@ const PORT = process.env.PORT || 3001;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:8080';
 const ADMIN_URL = process.env.ADMIN_URL || 'http://localhost:4001';
 const ADMIN_URL_DEV = process.env.NODE_ENV === 'production' ? null : 'http://localhost:4000';
-const VERCEL_FRONTEND_URL = 'https://chatpatti-frontend.vercel.app';
+const VERCEL_FRONTEND_URL = 'https://chatpatti.vercel.app';
 
 // Create HTTP server - only used in dev environment
 const server = http.createServer(app);
